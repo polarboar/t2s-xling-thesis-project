@@ -7,3 +7,6 @@
 [submodule "data/jiant"]
 	path = data/jiant
 	url = https://github.com/nyu-mll/jiant.git
+[submodule "data/slue"]
+	path = data/slue
+	url = https://github.com/asappresearch/slue-toolkit
