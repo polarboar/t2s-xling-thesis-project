@@ -3,9 +3,9 @@ Knowledge transfer between languages based on different modalities (speech and t
 
 ## Models
 
-[SpeechT5](https://github.com/microsoft/SpeechT5):
+    * [SpeechT5](https://github.com/microsoft/SpeechT5):
 
-    * Multimodal (speech + text) pre-trained model.
+        * Multimodal (speech + text) pre-trained model.
 
 ## Test sets
 
