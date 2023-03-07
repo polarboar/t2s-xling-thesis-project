@@ -3,13 +3,15 @@ Knowledge transfer between languages based on different modalities (speech and t
 
 ## Models
 
-SpeechT5
+SpeechT5:
+
     * [github](https://github.com/microsoft/SpeechT5)
     * Multimodal (speech + text) pre-trained model.
 
 ## Test sets
 
 GLUE:
+
     * [jiant](https://github.com/nyu-mll/jiant)
     * text datasets: Glue, Super Glue, and XTREME datasets
     * [here all supported tasks](https://github.com/CompVis/latent-diffusion/issues/207)
@@ -18,6 +20,7 @@ GLUE:
     * `pip install packaging==21.3` [here](https://github.com/CompVis/latent-diffusion/issues/207)
 
 SLUE:
+
     * [github](https://github.com/asappresearch/slue-toolkit)
     * speech datasets: sentiment analysis for now
     * pip install git+https://github.com/asappresearch/slue-toolkit.git
