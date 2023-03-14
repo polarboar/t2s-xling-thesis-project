@@ -8,6 +8,7 @@ Knowledge transfer between languages based on different modalities (speech and t
     - To use Hugging Face model, install HF as: 
         - Install as `pip install git+https://github.com/huggingface/transformers.git`
         - Install torch audio `pip install torchaudio`
+        - [Here](https://huggingface.co/mechanicalsea/speecht5-sid/tree/main) you can find the structure of the manifest for fairseq
 
 ## Test sets
 
