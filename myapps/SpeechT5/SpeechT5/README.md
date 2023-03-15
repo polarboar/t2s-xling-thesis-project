@@ -1,14 +1,13 @@
 # SpeechT5
 
 ## Important Note
-    
-    - I substitute the original SpeechT5 README for ours. You can check the origianl one [here](https://github.com/microsoft/SpeechT5/tree/main/SpeechT5).
+    - I substituted the original SpeechT5 README for ours. You can check the origianl one [here](https://github.com/microsoft/SpeechT5/tree/main/SpeechT5).
 
 ## Scripts
     - `activate.sh` this script is in `.gitignore` because it is machine dependent.
     - `create_sa_slue_data.sh` preapre data manifest to fine-tune on SLUE's Sentimenat Analysis (SA) task.
     - `fine_tune_sa_slue.sh` fine-tune an SA SLUE set.
-    - `decode_sa_slue.sh` decode an SA SLUE set.
+    - `decode_sa_slue.sh` decode an SA SLUE set and compute metrics: Accuracy, Precission, Recall, and F1. Because it is a multi class classification task, we provide the macro-averaged version -- consistent with [previous work](https://arxiv.org/pdf/2111.10367.pdf).
 
 ## Dependencies
     - SpeechT5 can be used with FAIRseq, and HuggingFace.

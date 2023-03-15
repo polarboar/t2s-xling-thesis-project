@@ -3,6 +3,10 @@ import logging
 import os
 import sys
 from argparse import Namespace
+from collections import defaultdict
+from sklearn import metrics
+
+
 
 import numpy as np
 import torch
@@ -28,6 +32,7 @@ def main(cfg: DictConfig):
 
 
 def _main(cfg: DictConfig, output_file):
+
     logging.basicConfig(
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -102,45 +107,77 @@ def _main(cfg: DictConfig, output_file):
     
     n_correct = 0
     n_total = 0
+    num_classes = 0
     assert hasattr(task.dataset(cfg.dataset.gen_subset), "tgt_dict")
     dict_class = task.dataset(cfg.dataset.gen_subset).tgt_dict
-    for i, sample in enumerate(progress):
-        if "net_input" not in sample or "source" not in sample["net_input"]:
-            continue
-        sample = utils.move_to_cuda(sample) if use_cuda else sample
-        prefix_tokens = utils.move_to_cuda(
-            torch.LongTensor([[dict_class.eos()] for _ in range(len(sample["net_input"]["source"]))])
-        )
+    ref_list = []
+    hyp_list = []
+    dict_class_ramons = {}
 
-        outs = task.generate_class(
-            models, 
-            sample["net_input"],
-            prefix_tokens,
-        )
-        prediction = outs.detach().cpu().tolist()
-        categories = [dict_class[predi] for predi in prediction]
+    with open(os.path.join(cfg.common_eval.results_path,"hyp"),"w") as hyp, open(os.path.join(cfg.common_eval.results_path,"metrics"),"w") as result_metrics, open(os.path.join(cfg.common_eval.results_path,"ref"),"w") as ref:
 
-        if "target" in sample:
-            target = sample["target"].squeeze(1).detach().cpu().tolist()
-            labels = [dict_class[tgti] for tgti in target]
+            for i, sample in enumerate(progress):
+                if "net_input" not in sample or "source" not in sample["net_input"]:
+                    continue
+                sample = utils.move_to_cuda(sample) if use_cuda else sample
+                prefix_tokens = utils.move_to_cuda(
+                    torch.LongTensor([[dict_class.eos()] for _ in range(len(sample["net_input"]["source"]))])
+                )
 
-        n_total += len(categories)
-        if "target" in sample:
-            r_correct = []
-            for ci, li in zip(categories, labels):
-                if ci == li:
-                    n_correct += 1
-                    r_correct.append(True)
-                else:
-                    r_correct.append(False)
+                outs = task.generate_class(
+                    models, 
+                    sample["net_input"],
+                    prefix_tokens,
+                )
+                prediction = outs.detach().cpu().tolist()
+                categories = [dict_class[predi] for predi in prediction]
 
-        logger.info(
-            f"{i} (size: {sample['net_input']['source'].shape}) -> {prediction} ({categories}) " +
-            f"<- target: {target} ({labels})\t{r_correct}" if "target" in sample else ""
-        )
-    logger.info(
-        f"Accuracy on {cfg.dataset.gen_subset}: {n_correct*100.0/n_total:.3f} ({n_correct}/{n_total})"
-    )
+                if "target" in sample:
+                    target = sample["target"].squeeze(1).detach().cpu().tolist()
+                    labels = [dict_class[tgti] for tgti in target]
+
+                n_total += len(categories)
+                if "target" in sample:
+                    r_correct = []
+                    for ci, li in zip(categories, labels):
+                        if(li == "Negative" or li == "Positive" or li == "Neutral"):
+                                if(ci not in dict_class_ramons):
+                                    dict_class_ramons[ci] = num_classes
+                                    num_classes +=1 
+                                if(li not in dict_class_ramons):
+                                    dict_class_ramons[li] = num_classes
+                                    num_classes +=1 
+                                    
+                                    
+                                hyp_list.append(dict_class_ramons[ci])
+                                ref_list.append(dict_class_ramons[li])
+
+                        if ci == li:
+                            n_correct += 1
+                            r_correct.append(True)
+                        else:
+                            r_correct.append(False)
+
+                logger.info(
+                    f"{i} (size: {sample['net_input']['source'].shape}) -> {prediction} ({categories}) " +
+                    f"<- target: {target} ({labels})\t{r_correct}" if "target" in sample else ""
+                )
+            precision = metrics.precision_score(ref_list, hyp_list, average='macro', zero_division=1)
+            acc = metrics.accuracy_score(ref_list, hyp_list)
+            recall = metrics.recall_score(ref_list, hyp_list, average='macro',zero_division=1)
+            f1_score = metrics.f1_score(ref_list, hyp_list, average='macro',zero_division=1)
+
+            acc=n_correct*100.0/n_total
+            result_metrics.write("ACC: "+str(acc)+"\n")
+            result_metrics.write("PRECISION: "+str(100*precision)+"\n")
+            result_metrics.write("RECALL: "+str(100*recall)+"\n")
+            result_metrics.write("F1: "+str(100*f1_score)+"\n")
+            logger.info(
+                f"Accuracy on {cfg.dataset.gen_subset}: {n_correct*100.0/n_total:.3f} ({n_correct}/{n_total})"
+            )
+            print(os.path.join(cfg.common_eval.results_path,"metrics"))
+
+
 
 
 def cli_main():

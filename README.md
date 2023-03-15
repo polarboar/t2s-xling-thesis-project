@@ -5,7 +5,7 @@ Knowledge transfer between languages based on different modalities (speech and t
 
 - [SpeechT5](https://github.com/microsoft/SpeechT5):
     - Multimodal (speech + text) pre-trained model.
-    - Follow the instructions [here](https://github.com/EdinburghNLP/t2s-xling/tree/main/myapps/SpeechT5)
+    - Follow the instructions [here](https://github.com/EdinburghNLP/t2s-xling/tree/main/myapps/SpeechT5/SpeechT5)
 
 ## Test sets
 
