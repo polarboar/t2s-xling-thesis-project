@@ -23,4 +23,9 @@
     - Install espnet `pip install espnet`
     - [Here](https://huggingface.co/mechanicalsea/speecht5-sid/tree/main) you can find the structure of the manifest for fairseq
 
+## TODO
+- Adapt a task `SpeechT5/speecht5/task` to go from `text->class`
+    - Concretely, now I am working creating a data loader in `SpeechT5/speecht5/data`
+- Decode a speech (fine-tuned) model with text
+- Decode a text  (fine-tuned) model with speech
 

@@ -5,13 +5,13 @@ export CUDA_VISIBLE_DEVICES=0
 . ./activate.sh
 
 
-
+MODEL=speecht5_base
 DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_slue/
-SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/slue_sa/
+SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sa/
 TRAIN_SET=train
 VALID_SET=valid
 USER_DIR=speecht5
-PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/speecht5_base.pt
+PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
 
 mkdir -p ${SAVE_DIR}
 
