@@ -6,15 +6,16 @@ export CUDA_VISIBLE_DEVICES=0
 
 
 
-DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/speech/slue-voxceleb/
+DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_slue/
 SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/slue_sa/
 TRAIN_SET=train
 VALID_SET=valid
 USER_DIR=speecht5
-PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/speecht5_large.pt
+PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/speecht5_base.pt
 
 mkdir -p ${SAVE_DIR}
 
+#  --fp16 \
   #--distributed-world-size 8 \
   #--distributed-port 0 \
 fairseq-train ${DATA_ROOT} \
@@ -26,7 +27,6 @@ fairseq-train ${DATA_ROOT} \
   --ddp-backend legacy_ddp \
   --log-format json \
   --seed 1 \
-  --fp16 \
   \
   --task speecht5 \
   --t5-task s2c \
