@@ -18,60 +18,64 @@ mkdir -p ${SAVE_DIR}
 #  --fp16 \
   #--distributed-world-size 8 \
   #--distributed-port 0 \
+
+
 fairseq-train ${DATA_ROOT} \
   --save-dir ${SAVE_DIR} \
   --tensorboard-logdir ${SAVE_DIR} \
   --train-subset ${TRAIN_SET} \
   --valid-subset ${VALID_SET} \
-  --user-dir ${USER_DIR} \
+  --hubert-label-dir ${LABEL_DIR} \
   --ddp-backend legacy_ddp \
+  --user-dir ${USER_DIR} \
   --log-format json \
   --seed 1 \
   \
   --task speecht5 \
-  --t5-task s2c \
+  --t5-task s2t \
   --sample-rate 16000 \
-  --num-workers 4 \
-  --batch-size 8 \
-  --update-freq 2 \
-  --data-buffer-size 0 \
+  --num-workers 6 \
+  --max-tokens 480256 \
+  --update-freq 4 \
+  --bpe-tokenizer ${BPE_TOKENIZER} \
+  --max-tokens-valid 3200000 \
   \
   --criterion speecht5 \
+  --label-smoothing 0.1 \
   --report-accuracy \
-  --best-checkpoint-metric "s2c_accuracy" \
-  --maximize-best-checkpoint-metric \
+  --sentence-avg \
   \
   --optimizer adam \
-  --dropout 0.1 \
-  --activation-dropout 0.1 \
-  --attention-dropout 0.1 \
-  --encoder-layerdrop 0.05 \
-  --lr-scheduler triangular \
-  --max-lr 2e-4 \
-  --lr-period-updates 60000 \
-  --lr-shrink 0.5 \
-  --lr 1e-8 \
+  --adam-betas "(0.9, 0.98)" \
+  --weight-decay 0.0 \
+  --clip-norm 10.0 \
+  --lr 0.0002 \
+  --lr-scheduler inverse_sqrt \
+  --warmup-updates 25000 \
   --feature-grad-mult 1.0 \
-  --weight-decay 0.1 \
   \
-  --max-update 60000 \
+  --max-update 80000 \
   --max-text-positions 600 \
-  --max-speech-positions 8000 \
+  --min-speech-sample-size 1056 \
+  --max-speech-sample-size 480256 \
+  --max-speech-positions 1876 \
   --required-batch-size-multiple 1 \
   --skip-invalid-size-inputs-valid-test \
-  --save-interval-updates 10000 \
-  --validate-after-updates 20000 \
-  --no-epoch-checkpoints \
-  --log-interval 10 \
+  --keep-last-epochs 10 \
   \
   --arch t5_transformer_base_asr \
   --share-input-output-embed \
   --find-unused-parameters \
   --bert-init \
   --relative-position-embedding \
-  --mask-prob 0.0 \
-  --mask-channel-prob 0.0 \
-  --sid-no-pooling-bn \
-  --sid-no-embed-postnet \
+  --freeze-encoder-updates 0 \
+  --mask-prob 0.5 \
+  --mask-channel-prob 0.5 \
   \
   --finetune-from-model ${PT_CHECKPOINT_PATH}
+
+
+
+
+
+

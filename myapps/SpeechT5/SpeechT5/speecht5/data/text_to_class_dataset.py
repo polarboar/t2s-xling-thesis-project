@@ -7,6 +7,7 @@
 # https://github.com/pytorch/fairseq; https://github.com/espnet/espnet
 # --------------------------------------------------------
 
+import itertools
 import logging
 import os
 from typing import Any, List, Optional
@@ -15,30 +16,42 @@ import numpy as np
 
 import torch
 import torch.nn.functional as F
+import librosa
+from fairseq.data.audio.speech_to_text_dataset import get_features_or_waveform
 from fairseq.data import data_utils, Dictionary
 from fairseq.data.fairseq_dataset import FairseqDataset
 
+
 logger = logging.getLogger(__name__)
 
+def _collate_frames(
+    frames: List[torch.Tensor], is_audio_input: bool = False
+):
+    """
+    Convert a list of 2D frames into a padded 3D tensor
+    Args:
+        frames (list): list of 2D frames of size L[i]*f_dim. Where L[i] is
+            length of i-th frame and f_dim is static dimension of features
+    Returns:
+        3D tensor of size len(frames)*len_max*f_dim where len_max is max of L[i]
+    """
+    max_len = max(frame.size(0) for frame in frames)
+    if is_audio_input:
+        out = frames[0].new_zeros((len(frames), max_len))
+    else:
+        out = frames[0].new_zeros((len(frames), max_len, frames[0].size(1)))
+    for i, v in enumerate(frames):
+        out[i, : v.size(0)] = v
+    return out
 
 def load_audio(manifest_path, max_keep, min_keep):
-    """manifest tsv: wav_path, wav_nframe, wav_class
-
-    Args
-        manifest_path: str
-        max_keep: int
-        min_keep: int
-    
-    Return
-        root, names, inds, tot, sizes, classes
-    """
     n_long, n_short = 0, 0
-    names, inds, sizes, classes = [], [], [], []
+    names, inds, sizes, spk_embeds = [], [], [], []
     with open(manifest_path) as f:
         root = f.readline().strip()
         for ind, line in enumerate(f):
             items = line.strip().split("\t")
-            assert len(items) >= 2, line
+            assert len(items) == 3, line
             sz = int(items[1])
             if min_keep is not None and sz < min_keep:
                 n_short += 1
@@ -46,8 +59,7 @@ def load_audio(manifest_path, max_keep, min_keep):
                 n_long += 1
             else:
                 names.append(items[0])
-                if len(items) > 2:
-                    classes.append(items[2])
+                spk_embeds.append(items[2])
                 inds.append(ind)
                 sizes.append(sz)
     tot = ind + 1
@@ -58,80 +70,146 @@ def load_audio(manifest_path, max_keep, min_keep):
             f"longest-loaded={max(sizes)}, shortest-loaded={min(sizes)}"
         )
     )
-    if len(classes) == 0:
-        logger.warn("no classes loaded only if inference")
-    return root, names, inds, tot, sizes, classes
+    return root, names, inds, tot, sizes, spk_embeds
 
 
-def sample_from_feature(x: np.ndarray, max_segment_length: int = 300):
-    """Load a segment within 300-400/51200-76800 frames or the corresponding samples from a utterance.
+def load_label(label_path, inds, tot):
+    with open(label_path) as f:
+        labels = [line.rstrip() for line in f]
+        assert (
+            len(labels) == tot
+        ), f"number of labels does not match ({len(labels)} != {tot})"
+        labels = [labels[i] for i in inds]
+    return labels
+
+
+def load_label_offset(label_path, inds, tot):
+    with open(label_path) as f:
+        code_lengths = [len(line.encode("utf-8")) for line in f]
+        assert (
+            len(code_lengths) == tot
+        ), f"number of labels does not match ({len(code_lengths)} != {tot})"
+        offsets = list(itertools.accumulate([0] + code_lengths))
+        offsets = [(offsets[i], offsets[i + 1]) for i in inds]
+    return offsets
+
+
+def logmelfilterbank(
+    audio,
+    sampling_rate,
+    fft_size=1024,
+    hop_size=256,
+    win_length=None,
+    window="hann",
+    num_mels=80,
+    fmin=80,
+    fmax=7600,
+    eps=1e-10,
+):
+    """Compute log-Mel filterbank feature. 
+    (https://github.com/kan-bayashi/ParallelWaveGAN/blob/master/parallel_wavegan/bin/preprocess.py)
 
     Args:
-        x (np.ndarray): feature or waveform (frames[, features]), e.g., log mel filter bank or waveform
-        max_segment_length (int, optional): maximum segment length. Defaults to 400.
+        audio (ndarray): Audio signal (T,).
+        sampling_rate (int): Sampling rate.
+        fft_size (int): FFT size.
+        hop_size (int): Hop size.
+        win_length (int): Window length. If set to None, it will be the same as fft_size.
+        window (str): Window function type.
+        num_mels (int): Number of mel basis.
+        fmin (int): Minimum frequency in mel basis calculation.
+        fmax (int): Maximum frequency in mel basis calculation.
+        eps (float): Epsilon value to avoid inf in log calculation.
 
     Returns:
-        np.ndarray: segmented features
+        ndarray: Log Mel filterbank feature (#frames, num_mels).
+
     """
-    if len(x) <= max_segment_length:
-        return x
-    start = np.random.randint(0, x.shape[0] - max_segment_length)
-    return x[start: start + max_segment_length]
+    # get amplitude spectrogram
+    x_stft = librosa.stft(audio, n_fft=fft_size, hop_length=hop_size,
+                          win_length=win_length, window=window, pad_mode="reflect")
+    spc = np.abs(x_stft).T  # (#frames, #bins)
+
+    # get mel basis
+    fmin = 0 if fmin is None else fmin
+    fmax = sampling_rate / 2 if fmax is None else fmax
+    mel_basis = librosa.filters.mel(sr=sampling_rate, n_fft=fft_size, n_mels=num_mels, fmin=fmin, fmax=fmax)
+
+    return np.log10(np.maximum(eps, np.dot(spc, mel_basis.T)))
+
 
 
 class TextToClassDataset(FairseqDataset):
     def __init__(
         self,
         manifest_path: str,
-        sample_rate: float,
+        label_paths: List[str],
         label_processors: Optional[List[Any]] = None,
         max_keep_sample_size: Optional[int] = None,
         min_keep_sample_size: Optional[int] = None,
         shuffle: bool = True,
         normalize: bool = False,
+        store_labels: bool = True,
+        src_dict: Optional[Dictionary] = None,
         tgt_dict: Optional[Dictionary] = None,
-        max_length: Optional[int] = None
+        tokenizer = None,
+        reduction_factor: int = 1,
     ):
-        self.audio_root, self.audio_names, inds, tot, self.wav_sizes, self.wav_classes = load_audio(
-            manifest_path, max_keep_sample_size, min_keep_sample_size
-        )
-        self.sample_rate = sample_rate
         self.shuffle = shuffle
+        self.src_dict = src_dict
+        self.tokenizer = tokenizer
 
+        self.num_labels = len(label_paths)
         self.label_processors = label_processors
+        self.store_labels = store_labels
+
+        if store_labels:
+            self.label_list = [load_label(p, inds, tot) for p in label_paths]
+        else:
+            self.label_paths = label_paths
+            self.label_offsets_list = [
+                load_label_offset(p, inds, tot) for p in label_paths
+            ]
+        assert label_processors is None or len(label_processors) == self.num_labels
 
         self.normalize = normalize
-        self.tgt_dict = tgt_dict
-        self.max_length = max_length
+        self.reduction_factor = reduction_factor
         logger.info(
-            f"max_length={max_length}, normalize={normalize}"
+            f"reduction_factor={reduction_factor}, normalize={normalize}"
         )
 
-    def get_audio(self, index):
-        import soundfile as sf
+    def get_label(self, index, label_idx):
+        if self.store_labels:
+            label = self.label_list[label_idx][index]
+        else:
+            with open(self.label_paths[label_idx]) as f:
+                offset_s, offset_e = self.label_offsets_list[label_idx][index]
+                f.seek(offset_s)
+                label = f.read(offset_e - offset_s)
 
-        wav_path = os.path.join(self.audio_root, self.audio_names[index])
-        wav, cur_sample_rate = sf.read(wav_path)
-        if self.max_length is not None:
-            wav = sample_from_feature(wav, self.max_length)
-        wav = torch.from_numpy(wav).float()
-        wav = self.postprocess(wav, cur_sample_rate)
-        return wav
-
-    def get_label(self, index):
-        label = self.wav_classes[index]
+        if self.tokenizer is not None:
+            label = self.tokenizer.encode(label)
 
         if self.label_processors is not None:
-            label = self.label_processors(label)
+            label = self.label_processors[label_idx](label)
         return label
 
-    def __getitem__(self, index):
-        wav = self.get_audio(index)
-        label = None
-        if len(self.wav_classes) == len(self.audio_names):
-            label = self.get_label(index)
-        return {"id": index, "source": wav, "label": label}
+    def get_labels(self, index):
+        return [self.get_label(index, i) for i in range(self.num_labels)]
 
+    def get_classes(self, index):
+        return [self.get_class(index, i) for i in range(self.num_labels)]
+
+    def __getitem__(self, index):
+        labels = self.get_labels(index)
+        label = self.get_label(index)
+
+        spkembs = get_features_or_waveform(
+            os.path.join(self.audio_root, self.spk_embeds[index])
+        )
+        spkembs = torch.from_numpy(spkembs).float()
+        return {"id": index, "source": labels, "target": classes}
+    
     def __len__(self):
         return len(self.wav_sizes)
 
@@ -140,78 +218,57 @@ class TextToClassDataset(FairseqDataset):
         if len(samples) == 0:
             return {}
 
-        audios = [s["source"] for s in samples]
-        audio_sizes = [len(s) for s in audios]
+        fbanks = [s["target"] for s in samples]
+        fbank_sizes = [len(s) for s in fbanks]
 
-        audio_size = max(audio_sizes)
-        collated_audios, padding_mask = self.collater_audio(
-            audios, audio_size
+        collated_fbanks = _collate_frames(fbanks)
+        collated_fbanks_size = torch.tensor(fbank_sizes, dtype=torch.long)
+
+        # thin out frames for reduction factor (B, Lmax, odim) ->  (B, Lmax//r, odim)
+        if self.reduction_factor > 1:
+            collated_fbanks_in = collated_fbanks[:, self.reduction_factor - 1 :: self.reduction_factor]
+            collated_fbanks_size_in = collated_fbanks_size.new([torch.div(olen, self.reduction_factor, rounding_mode='floor') for olen in collated_fbanks_size])
+        else:
+            collated_fbanks_in, collated_fbanks_size_in = collated_fbanks, collated_fbanks_size
+
+        prev_output_tokens = torch.cat(
+            [collated_fbanks_in.new_zeros((collated_fbanks_in.shape[0], 1, collated_fbanks_in.shape[2])), collated_fbanks_in[:, :-1]], dim=1
         )
 
-        decoder_label = None
-        decoder_target = None
-        decoder_target_lengths = None
-        if samples[0]["label"] is not None:
-            targets_by_label = [
-                [s["label"] for s in samples]
-            ]
-            targets_list, lengths_list, ntokens_list = self.collater_label(targets_by_label)
+        # make labels for stop prediction
+        labels = collated_fbanks.new_zeros(collated_fbanks.size(0), collated_fbanks.size(1))
+        for i, l in enumerate(fbank_sizes):
+            labels[i, l - 1 :] = 1.0
 
-            decoder_label = [
-                (targets_list[0][i, :lengths_list[0][i]]).long()
-                for i in range(targets_list[0].size(0))
-            ]
+        spkembs = _collate_frames([s["spkembs"] for s in samples], is_audio_input=True)
 
-            decoder_target = data_utils.collate_tokens(
-                decoder_label,
-                self.tgt_dict.pad(),
-                self.tgt_dict.eos(),
-                left_pad=False,
-                move_eos_to_beginning=False,
-            )
-            decoder_target_lengths = torch.tensor(
-                [x.size(0) for x in decoder_label], dtype=torch.long
-            )
-        prev_output_tokens = data_utils.collate_tokens(
-            [torch.LongTensor([-1]) for _ in samples],
-            self.tgt_dict.pad(),
-            self.tgt_dict.eos(),
-            left_pad=False,
-            move_eos_to_beginning=True,
-        )
+        sources_by_label = [
+            [s["source"][i] for s in samples] for i in range(self.num_labels)
+        ]
+        sources_list, lengths_list, ntokens_list = self.collater_label(sources_by_label)
 
         net_input = {
-            "source": collated_audios, 
-            "padding_mask": padding_mask,
+            "src_tokens": sources_list[0], 
+            "src_lengths": lengths_list[0],
             "prev_output_tokens": prev_output_tokens,
-            "task_name": "s2c",
+            "tgt_lengths": collated_fbanks_size_in,
+            "spkembs": spkembs,
+            "task_name": "t2s",
         }
         batch = {
             "id": torch.LongTensor([s["id"] for s in samples]),
+            "name": [s["audio_name"] for s in samples],
             "net_input": net_input,
-            "target": decoder_target,
-            "target_lengths": decoder_target_lengths,
-            "task_name": "s2c",
-            "ntokens": len(samples),
+            "labels": labels,
+            "dec_target": collated_fbanks,
+            "dec_target_lengths": collated_fbanks_size,
+            "src_lengths": lengths_list[0],
+            "task_name": "t2s",
+            "ntokens": ntokens_list[0],
+            "target": collated_fbanks,
         }
 
         return batch
-
-    def collater_audio(self, audios, audio_size):
-        collated_audios = audios[0].new_zeros(len(audios), audio_size)
-        padding_mask = (
-            torch.BoolTensor(collated_audios.shape).fill_(False)
-        )
-        for i, audio in enumerate(audios):
-            diff = len(audio) - audio_size
-            if diff == 0:
-                collated_audios[i] = audio
-            elif diff < 0:
-                collated_audios[i] = torch.cat([audio, audio.new_full((-diff,), 0.0)])
-                padding_mask[i, diff:] = True
-            else:
-                raise Exception("Diff should not be larger than 0")
-        return collated_audios, padding_mask
 
     def collater_seq_label(self, targets, pad):
         lengths = torch.LongTensor([len(t) for t in targets])
@@ -221,7 +278,7 @@ class TextToClassDataset(FairseqDataset):
 
     def collater_label(self, targets_by_label):
         targets_list, lengths_list, ntokens_list = [], [], []
-        itr = zip(targets_by_label, [self.tgt_dict.pad()])
+        itr = zip(targets_by_label, [self.src_dict.pad()])
         for targets, pad in itr:
             targets, lengths, ntokens = self.collater_seq_label(targets, pad)
             targets_list.append(targets)

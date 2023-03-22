@@ -29,7 +29,7 @@ from speecht5.data.speech_to_text_dataset import SpeechToTextDataset
 from speecht5.data.text_to_speech_dataset import TextToSpeechDataset
 from speecht5.data.speech_to_speech_dataset import SpeechToSpeechDataset
 from speecht5.data.speech_to_class_dataset import SpeechToClassDataset
-from speecht5.data.text_to_class_dataset import SpeechToClassDataset
+from speecht5.data.text_to_class_dataset import TextToClassDataset
 from speecht5.data.speech_dataset import SpeechPretrainDataset
 from speecht5.data.text_dataset import TextPretrainDataset
 from fairseq.data.shorten_dataset import maybe_shorten_dataset
@@ -377,7 +377,8 @@ class SpeechT5Task(LegacyFairseqTask):
             is_train_split = ("train" in split)
             is_valid_split = ("valid" in split)
             if is_train_split:
-                max_length = 51200
+                #max_length = 51200
+                max_length = 457440
             elif is_valid_split:
                 max_length = 76800
             else:
@@ -395,6 +396,31 @@ class SpeechT5Task(LegacyFairseqTask):
                 max_length=max_length
             )
         elif self.t5_task == "t2c":
+            #TODO this is ours
+
+            from fairseq.data import ConcatDataset
+            bpe_tokenizer = self.build_bpe(self.args)
+            procs = [LabelEncoder(self.dicts["text"])]
+            t2s_datasets = [
+                TextToClassDataset(
+                    manifest_path=f"{self.args.data}/{name}.tsv",
+                    label_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
+                    label_processors=procs,
+                    max_keep_sample_size=self.max_pos[0],
+                    normalize=self.args.normalize,
+                    store_labels=False,
+                    src_dict=self.dicts["text"],
+                    tgt_dict=self.dicts["text"],
+                    tokenizer=bpe_tokenizer,
+                    reduction_factor=self.args.reduction_factor,
+                )
+                for name in split.split(",")
+            ]
+            self.datasets[split] = ConcatDataset(t2s_datasets) if len(t2s_datasets) > 1 else t2s_datasets[0]
+        elif self.t5_task == "s2s":
+
+
+
             is_train_split = ("train" in split)
             is_valid_split = ("valid" in split)
             if is_train_split:
@@ -416,6 +442,9 @@ class SpeechT5Task(LegacyFairseqTask):
                 tgt_dict=self.dicts["text"],
                 max_length=max_length
             )
+
+
+
         elif self.t5_task == "pretrain":
             is_train_split = ("train" in split)
             pretrain_datasets = []

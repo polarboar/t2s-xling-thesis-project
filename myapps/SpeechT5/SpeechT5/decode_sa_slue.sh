@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=0
 . ./activate.sh
 
 
-CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/slue_sa/checkpoint_best.pt
+CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/speecht5_base/slue_sa/checkpoint_best.pt
 DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_slue/
 SUBSET=valid
 USER_DIR=speecht5
