@@ -6,12 +6,15 @@ export CUDA_VISIBLE_DEVICES=0
 
 
 MODEL=speecht5_base
-DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_slue/
-SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sa/
+DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_sst2/
+SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sst2/
 TRAIN_SET=train
 VALID_SET=valid
 USER_DIR=speecht5
 PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
+
+#not sure about this
+BPE_TOKENIZER=/disk/scratch2/ramons/data/t2s-xling/models/speechT5/spm_char.model
 
 mkdir -p ${SAVE_DIR}
 
@@ -25,45 +28,50 @@ fairseq-train ${DATA_ROOT} \
   --tensorboard-logdir ${SAVE_DIR} \
   --train-subset ${TRAIN_SET} \
   --valid-subset ${VALID_SET} \
-  --user-dir ${USER_DIR} \
+  --hubert-label-dir ${LABEL_DIR} \
   --ddp-backend legacy_ddp \
+  --user-dir ${USER_DIR} \
   --log-format json \
   --seed 1 \
   \
   --task speecht5 \
-  --t5-task s2c \
+  --t5-task t2c \
   --sample-rate 16000 \
   --num-workers 4 \
-  --batch-size 2 \
-  --update-freq 2 \
-  --data-buffer-size 0 \
+  --max-tokens 3200000 \
+  --update-freq 1 \
+  --bpe-tokenizer ${BPE_TOKENIZER} \
+  --max-tokens-valid 3200000 \
   \
   --criterion speecht5 \
+  --use-guided-attn-loss \
   --report-accuracy \
-  --best-checkpoint-metric "s2c_accuracy" \
-  --maximize-best-checkpoint-metric \
+  --sentence-avg \
   \
   --optimizer adam \
-  --dropout 0.1 \
-  --activation-dropout 0.1 \
-  --attention-dropout 0.1 \
-  --encoder-layerdrop 0.05 \
-  --lr-scheduler triangular \
-  --max-lr 2e-4 \
-  --lr-period-updates 60000 \
-  --lr-shrink 0.5 \
-  --lr 1e-8 \
+  --adam-betas "(0.9, 0.98)" \
+  --dropout 0.15 \
+  --activation-dropout 0.15 \
+  --attention-dropout 0.15 \
+  --encoder-layerdrop 0.0 \
+  --decoder-layerdrop 0.0 \
+  --weight-decay 0.0 \
+  --clip-norm 25.0 \
+  --lr 0.0001 \
+  --lr-scheduler inverse_sqrt \
+  --warmup-updates 10000 \
   --feature-grad-mult 1.0 \
-  --weight-decay 0.1 \
   \
-  --max-update 60000 \
+  --max-update 120000 \
   --max-text-positions 600 \
-  --max-speech-positions 8000 \
+  --min-speech-sample-size 1056 \
+  --max-speech-sample-size 480256 \
+  --max-speech-positions 1876 \
   --required-batch-size-multiple 1 \
   --skip-invalid-size-inputs-valid-test \
-  --save-interval-updates 10000 \
+  --keep-last-epochs 10 \
   --validate-after-updates 20000 \
-  --no-epoch-checkpoints \
+  --validate-interval 50 \
   --log-interval 10 \
   \
   --arch t5_transformer_base_asr \
@@ -71,9 +79,6 @@ fairseq-train ${DATA_ROOT} \
   --find-unused-parameters \
   --bert-init \
   --relative-position-embedding \
-  --mask-prob 0.0 \
-  --mask-channel-prob 0.0 \
-  --sid-no-pooling-bn \
-  --sid-no-embed-postnet \
+  --freeze-encoder-updates 20000 \
   \
   --finetune-from-model ${PT_CHECKPOINT_PATH}
