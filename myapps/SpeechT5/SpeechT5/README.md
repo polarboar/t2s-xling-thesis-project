@@ -33,6 +33,7 @@
 ## TODO
 - [x] fine-tune on speech sentiment analysis
 - [ ] fine-tune on text sentiment analysis (text 2 class)
+- [ ] check performance upper vs lower case
 - [ ] evaluate on text setniment analysis
 - [ ] evluate text on speech (cross evaluation)
 
