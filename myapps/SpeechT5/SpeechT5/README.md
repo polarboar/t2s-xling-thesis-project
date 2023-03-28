@@ -23,6 +23,7 @@
 - `fine_tune_sa_slue.sh` fine-tune an SA SLUE set.
 - `decode_sa_slue.sh` decode an SA SLUE set and compute metrics: Accuracy, Precission, Recall, and F1. Because it is a multi class classification task, we provide the macro-averaged version -- consistent with [previous work](https://arxiv.org/pdf/2111.10367.pdf).
 - `fine_tune_sa_sst2.sh` fine-tune an SA SST2.
+- `fine_tune_sa_slue_base_hydra.sh` scripts that runs bunch of experiments in a row modifying different parameters.
 
 #Currently working
 - Adapt a task `SpeechT5/speecht5/task` to go from `text->class`
@@ -34,6 +35,7 @@
 - [x] fine-tune on speech sentiment analysis
 - [ ] fine-tune on text sentiment analysis (text 2 class)
 - [ ] check performance upper vs lower case
+- [ ] port SA speech fine-tuning optimizer to SA text 
 - [ ] evaluate on text setniment analysis
 - [ ] evluate text on speech (cross evaluation)
 

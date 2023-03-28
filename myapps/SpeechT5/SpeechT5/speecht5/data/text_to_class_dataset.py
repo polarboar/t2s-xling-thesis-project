@@ -143,12 +143,11 @@ class TextToClassDataset(FairseqDataset):
     def __init__(
         self,
         manifest_path: str,
-        label_paths: List[str],
-        label_processors: Optional[List[Any]] = None,
-        max_keep_sample_size: Optional[int] = None,
-        min_keep_sample_size: Optional[int] = None,
+        text_paths: List[str],
+        text_processors: Optional[List[Any]] = None,
+        class_paths: List[str],
+        class_processors: Optional[List[Any]] = None,
         shuffle: bool = True,
-        normalize: bool = False,
         store_labels: bool = True,
         src_dict: Optional[Dictionary] = None,
         tgt_dict: Optional[Dictionary] = None,
@@ -160,7 +159,15 @@ class TextToClassDataset(FairseqDataset):
         self.tokenizer = tokenizer
 
         self.num_labels = len(label_paths)
-        self.label_processors = label_processors
+
+        self.text_processors = text_processors
+        self.class_processors = class_processors
+
+        self.src_dict = src_dict
+        self.tgt_dict = tgt_dict
+
+        self.max_length = max_length
+
         self.store_labels = store_labels
 
         if store_labels:
@@ -172,11 +179,7 @@ class TextToClassDataset(FairseqDataset):
             ]
         assert label_processors is None or len(label_processors) == self.num_labels
 
-        self.normalize = normalize
         self.reduction_factor = reduction_factor
-        logger.info(
-            f"reduction_factor={reduction_factor}, normalize={normalize}"
-        )
 
     def get_label(self, index, label_idx):
         if self.store_labels:
@@ -305,15 +308,3 @@ class TextToClassDataset(FairseqDataset):
         order.append(self.wav_sizes)
         return np.lexsort(order)[::-1]
 
-    def postprocess(self, wav, cur_sample_rate):
-        if wav.dim() == 2:
-            wav = wav.mean(-1)
-        assert wav.dim() == 1, wav.dim()
-
-        if cur_sample_rate != self.sample_rate:
-            raise Exception(f"sr {cur_sample_rate} != {self.sample_rate}")
-
-        if self.normalize:
-            with torch.no_grad():
-                wav = F.layer_norm(wav, wav.shape)
-        return wav

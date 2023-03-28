@@ -29,7 +29,7 @@ from speecht5.data.speech_to_text_dataset import SpeechToTextDataset
 from speecht5.data.text_to_speech_dataset import TextToSpeechDataset
 from speecht5.data.speech_to_speech_dataset import SpeechToSpeechDataset
 from speecht5.data.speech_to_class_dataset import SpeechToClassDataset
-from speecht5.data.text_to_class_dataset import TextToClassDataset
+#from speecht5.data.text_to_class_dataset import TextToClassDataset
 from speecht5.data.speech_dataset import SpeechPretrainDataset
 from speecht5.data.text_dataset import TextPretrainDataset
 from fairseq.data.shorten_dataset import maybe_shorten_dataset
@@ -397,26 +397,28 @@ class SpeechT5Task(LegacyFairseqTask):
             )
         elif self.t5_task == "t2c":
             #TODO this is ours
-
+           
             from fairseq.data import ConcatDataset
             bpe_tokenizer = self.build_bpe(self.args)
-            procs = [LabelEncoder(self.dicts["text"])]
-            t2s_datasets = [
-                TextToClassDataset(
+            text_procs = [LabelEncoder(self.dicts["text"])]
+            class_procs = [LabelEncoder(self.dicts["text"])]
+
+            self.datasets[split] = TextToClassDataset(
                     manifest_path=f"{self.args.data}/{name}.tsv",
-                    label_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
-                    label_processors=procs,
+                    text_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
+                    text_processors=text_procs,
+                    class_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
+                    class_processors=class_procs,
                     max_keep_sample_size=self.max_pos[0],
                     normalize=self.args.normalize,
                     store_labels=False,
                     src_dict=self.dicts["text"],
                     tgt_dict=self.dicts["text"],
                     tokenizer=bpe_tokenizer,
-                    reduction_factor=self.args.reduction_factor,
-                )
-                for name in split.split(",")
-            ]
-            self.datasets[split] = ConcatDataset(t2s_datasets) if len(t2s_datasets) > 1 else t2s_datasets[0]
+                    reduction_factor=self.args.reduction_factor,)
+
+            sys.exit()
+
         elif self.t5_task == "s2s":
 
 

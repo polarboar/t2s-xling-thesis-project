@@ -6,15 +6,15 @@ export CUDA_VISIBLE_DEVICES=0
 
 
 MODEL=speecht5_base
-DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_sst2/
-SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sst2/
+DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/text/sst/
+SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}/sst_sa/
 TRAIN_SET=train
 VALID_SET=valid
 USER_DIR=speecht5
 PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
 
 #not sure about this
-BPE_TOKENIZER=/disk/scratch2/ramons/data/t2s-xling/models/speechT5/spm_char.model
+BPE_TOKENIZER=/disk/scratch2/ramons/data/t2s-xling/models/speechT5/fairseq/spm/spm_char.model
 
 mkdir -p ${SAVE_DIR}
 
@@ -28,7 +28,7 @@ fairseq-train ${DATA_ROOT} \
   --tensorboard-logdir ${SAVE_DIR} \
   --train-subset ${TRAIN_SET} \
   --valid-subset ${VALID_SET} \
-  --hubert-label-dir ${LABEL_DIR} \
+  --hubert-label-dir /disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/text/sst/ \
   --ddp-backend legacy_ddp \
   --user-dir ${USER_DIR} \
   --log-format json \

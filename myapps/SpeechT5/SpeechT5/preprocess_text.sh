@@ -33,3 +33,5 @@ fairseq-preprocess \
 --workers 20 \
 --only-source \
 --task speech_to_text \
+
+mv ${sst_folder_dest}/dict.en.txt ${sst_folder_dest}/dict.txt
