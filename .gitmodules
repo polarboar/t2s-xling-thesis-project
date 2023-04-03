@@ -10,3 +10,6 @@
 [submodule "data/slue"]
 	path = data/slue
 	url = https://github.com/asappresearch/slue-toolkit
+[submodule "myapps/slue-toolkit"]
+	path = myapps/slue-toolkit
+	url = https://github.com/sshon-asapp/slue-toolkit.git

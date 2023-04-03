@@ -1,0 +1,5 @@
+- task.data=
+- task.label_dir=
+- task.labels=["km"]
+- model.label_rate=50
+- common.user_dir=SpeechT5/Speech2C/speech2c

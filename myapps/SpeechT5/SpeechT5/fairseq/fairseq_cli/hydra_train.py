@@ -33,6 +33,7 @@ def hydra_main(cfg: FairseqConfig) -> float:
             # make hydra logging work with ddp (see # see https://github.com/facebookresearch/hydra/issues/1126)
             cfg.job_logging_cfg = OmegaConf.to_container(HydraConfig.get().job_logging, resolve=True)
 
+    print(cfg)
     cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True, enum_to_str=True))
     OmegaConf.set_struct(cfg, True)
 

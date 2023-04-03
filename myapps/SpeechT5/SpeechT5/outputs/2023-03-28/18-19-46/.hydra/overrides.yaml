@@ -1,0 +1,2 @@
+- common.user_dir=SpeechT5/SpeechT5/speecht5
+- +model=transformer_lm

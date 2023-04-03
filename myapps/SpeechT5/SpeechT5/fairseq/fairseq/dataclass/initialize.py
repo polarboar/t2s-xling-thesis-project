@@ -39,6 +39,7 @@ def add_defaults(cfg: DictConfig) -> None:
     OmegaConf.set_struct(cfg, False)
 
     for k, v in FairseqConfig.__dataclass_fields__.items():
+
         field_cfg = cfg.get(k)
         if field_cfg is not None and v.type == Any:
             dc = None
