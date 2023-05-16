@@ -12,4 +12,4 @@
 	url = https://github.com/asappresearch/slue-toolkit
 [submodule "myapps/slue-toolkit"]
 	path = myapps/slue-toolkit
-	url = https://github.com/sshon-asapp/slue-toolkit.git
+	url = https://github.com/asappresearch/slue-toolkit.git
