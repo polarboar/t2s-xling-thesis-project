@@ -407,7 +407,8 @@ class SpeechT5Task(LegacyFairseqTask):
             class_procs = [LabelEncoder(self.dicts["classes"])]
 
             self.datasets[split] = TextToClassDataset(
-                    manifest=f"{self.args.data}/{split}.tsv",
+                    text_path=f"{self.args.data}/{split}.spm.en",
+                    class_path=f"{self.args.data}/{split}.labels",
                     #text_paths=[f"{self.args.hubert_label_dir}/{split}.txt"],
                     text_processors=text_procs,
                     #class_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],

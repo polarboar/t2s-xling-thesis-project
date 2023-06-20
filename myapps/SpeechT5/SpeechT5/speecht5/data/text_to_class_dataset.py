@@ -65,21 +65,26 @@ def load_label_offset(label_path, inds, tot):
         offsets = [(offsets[i], offsets[i + 1]) for i in inds]
     return offsets
 
-def load_text_and_classes(manifest):
+def load_text_and_classes(text_path, class_path):
     classes = []
     text = []
-    with open(manifest) as f:
+    with open(text_path) as f:
         for line in f:
-            data = line.strip().split('\t')
-            classes.append(data[1])
-            text.append(data[0])
+            data = line.strip()
+            text.append(data)
+
+    with open(class_path) as f:
+        for line in f:
+            data = line.strip()
+            classes.append(data)
 
     return text, classes
 
 class TextToClassDataset(FairseqDataset):
     def __init__(
         self,
-        manifest: List[str],
+        text_path: str,
+        class_path: str,
         text_processors: Optional[List[Any]] = None,
         class_processors: Optional[List[Any]] = None,
         shuffle: bool = True,
@@ -98,7 +103,7 @@ class TextToClassDataset(FairseqDataset):
         self.text_processors = text_processors
         self.class_processors = class_processors
 
-        self.text, self.classes = load_text_and_classes(manifest)
+        self.text, self.classes = load_text_and_classes(text_path, class_path)
 
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
