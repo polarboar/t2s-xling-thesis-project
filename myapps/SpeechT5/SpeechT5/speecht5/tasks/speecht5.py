@@ -29,7 +29,7 @@ from speecht5.data.speech_to_text_dataset import SpeechToTextDataset
 from speecht5.data.text_to_speech_dataset import TextToSpeechDataset
 from speecht5.data.speech_to_speech_dataset import SpeechToSpeechDataset
 from speecht5.data.speech_to_class_dataset import SpeechToClassDataset
-#from speecht5.data.text_to_class_dataset import TextToClassDataset
+from speecht5.data.text_to_class_dataset import TextToClassDataset
 from speecht5.data.speech_dataset import SpeechPretrainDataset
 from speecht5.data.text_dataset import TextPretrainDataset
 from fairseq.data.shorten_dataset import maybe_shorten_dataset
@@ -316,6 +316,9 @@ class SpeechT5Task(LegacyFairseqTask):
             else:
                 dicts["text"] = Dictionary.load(op.join(args.data, config.vocab_filename))
 
+        if args.t5_task == "t2c":
+            dicts["classes"] = Dictionary.load(op.join(args.data, "dict_classes.txt"))
+
         return cls(args, dicts, config)
 
     def build_criterion(self, args):
@@ -401,23 +404,23 @@ class SpeechT5Task(LegacyFairseqTask):
             from fairseq.data import ConcatDataset
             bpe_tokenizer = self.build_bpe(self.args)
             text_procs = [LabelEncoder(self.dicts["text"])]
-            class_procs = [LabelEncoder(self.dicts["text"])]
+            class_procs = [LabelEncoder(self.dicts["classes"])]
 
             self.datasets[split] = TextToClassDataset(
-                    manifest_path=f"{self.args.data}/{name}.tsv",
-                    text_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
+                    manifest=f"{self.args.data}/{split}.tsv",
+                    #text_paths=[f"{self.args.hubert_label_dir}/{split}.txt"],
                     text_processors=text_procs,
-                    class_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
+                    #class_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
                     class_processors=class_procs,
                     max_keep_sample_size=self.max_pos[0],
                     normalize=self.args.normalize,
                     store_labels=False,
                     src_dict=self.dicts["text"],
-                    tgt_dict=self.dicts["text"],
+                    tgt_dict=self.dicts["classes"],
                     tokenizer=bpe_tokenizer,
                     reduction_factor=self.args.reduction_factor,)
 
-            sys.exit()
+            #sys.exit()
 
         elif self.t5_task == "s2s":
 

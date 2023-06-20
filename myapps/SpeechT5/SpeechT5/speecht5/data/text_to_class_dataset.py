@@ -44,34 +44,6 @@ def _collate_frames(
         out[i, : v.size(0)] = v
     return out
 
-def load_audio(manifest_path, max_keep, min_keep):
-    n_long, n_short = 0, 0
-    names, inds, sizes, spk_embeds = [], [], [], []
-    with open(manifest_path) as f:
-        root = f.readline().strip()
-        for ind, line in enumerate(f):
-            items = line.strip().split("\t")
-            assert len(items) == 3, line
-            sz = int(items[1])
-            if min_keep is not None and sz < min_keep:
-                n_short += 1
-            elif max_keep is not None and sz > max_keep:
-                n_long += 1
-            else:
-                names.append(items[0])
-                spk_embeds.append(items[2])
-                inds.append(ind)
-                sizes.append(sz)
-    tot = ind + 1
-    logger.info(
-        (
-            f"max_keep={max_keep}, min_keep={min_keep}, "
-            f"loaded {len(names)}, skipped {n_short} short and {n_long} long, "
-            f"longest-loaded={max(sizes)}, shortest-loaded={min(sizes)}"
-        )
-    )
-    return root, names, inds, tot, sizes, spk_embeds
-
 
 def load_label(label_path, inds, tot):
     with open(label_path) as f:
@@ -93,59 +65,22 @@ def load_label_offset(label_path, inds, tot):
         offsets = [(offsets[i], offsets[i + 1]) for i in inds]
     return offsets
 
+def load_text_and_classes(manifest):
+    classes = []
+    text = []
+    with open(manifest) as f:
+        for line in f:
+            data = line.strip().split('\t')
+            classes.append(data[1])
+            text.append(data[0])
 
-def logmelfilterbank(
-    audio,
-    sampling_rate,
-    fft_size=1024,
-    hop_size=256,
-    win_length=None,
-    window="hann",
-    num_mels=80,
-    fmin=80,
-    fmax=7600,
-    eps=1e-10,
-):
-    """Compute log-Mel filterbank feature. 
-    (https://github.com/kan-bayashi/ParallelWaveGAN/blob/master/parallel_wavegan/bin/preprocess.py)
-
-    Args:
-        audio (ndarray): Audio signal (T,).
-        sampling_rate (int): Sampling rate.
-        fft_size (int): FFT size.
-        hop_size (int): Hop size.
-        win_length (int): Window length. If set to None, it will be the same as fft_size.
-        window (str): Window function type.
-        num_mels (int): Number of mel basis.
-        fmin (int): Minimum frequency in mel basis calculation.
-        fmax (int): Maximum frequency in mel basis calculation.
-        eps (float): Epsilon value to avoid inf in log calculation.
-
-    Returns:
-        ndarray: Log Mel filterbank feature (#frames, num_mels).
-
-    """
-    # get amplitude spectrogram
-    x_stft = librosa.stft(audio, n_fft=fft_size, hop_length=hop_size,
-                          win_length=win_length, window=window, pad_mode="reflect")
-    spc = np.abs(x_stft).T  # (#frames, #bins)
-
-    # get mel basis
-    fmin = 0 if fmin is None else fmin
-    fmax = sampling_rate / 2 if fmax is None else fmax
-    mel_basis = librosa.filters.mel(sr=sampling_rate, n_fft=fft_size, n_mels=num_mels, fmin=fmin, fmax=fmax)
-
-    return np.log10(np.maximum(eps, np.dot(spc, mel_basis.T)))
-
-
+    return text, classes
 
 class TextToClassDataset(FairseqDataset):
     def __init__(
         self,
-        manifest_path: str,
-        text_paths: List[str],
+        manifest: List[str],
         text_processors: Optional[List[Any]] = None,
-        class_paths: List[str],
         class_processors: Optional[List[Any]] = None,
         shuffle: bool = True,
         store_labels: bool = True,
@@ -153,15 +88,17 @@ class TextToClassDataset(FairseqDataset):
         tgt_dict: Optional[Dictionary] = None,
         tokenizer = None,
         reduction_factor: int = 1,
+        max_length: Optional[int] = None
     ):
         self.shuffle = shuffle
-        self.src_dict = src_dict
         self.tokenizer = tokenizer
 
-        self.num_labels = len(label_paths)
+        #self.num_labels = len(label_paths)
 
         self.text_processors = text_processors
         self.class_processors = class_processors
+
+        self.text, self.classes = load_text_and_classes(manifest)
 
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
@@ -170,48 +107,42 @@ class TextToClassDataset(FairseqDataset):
 
         self.store_labels = store_labels
 
-        if store_labels:
-            self.label_list = [load_label(p, inds, tot) for p in label_paths]
-        else:
-            self.label_paths = label_paths
-            self.label_offsets_list = [
-                load_label_offset(p, inds, tot) for p in label_paths
-            ]
-        assert label_processors is None or len(label_processors) == self.num_labels
-
         self.reduction_factor = reduction_factor
-
-    def get_label(self, index, label_idx):
-        if self.store_labels:
-            label = self.label_list[label_idx][index]
-        else:
-            with open(self.label_paths[label_idx]) as f:
-                offset_s, offset_e = self.label_offsets_list[label_idx][index]
-                f.seek(offset_s)
-                label = f.read(offset_e - offset_s)
-
-        if self.tokenizer is not None:
-            label = self.tokenizer.encode(label)
-
-        if self.label_processors is not None:
-            label = self.label_processors[label_idx](label)
-        return label
 
     def get_labels(self, index):
         return [self.get_label(index, i) for i in range(self.num_labels)]
+    
+    def get_label(self, index):
+        label = self.text_classes[index]
+        if self.class_processors is not None:
+            label = self.class_processors(label)
+
+        return label
+
+    def get_class(self, index):
+        label = self.classes[index]
+        if self.class_processors is not None:
+            label = self.class_processors(label)
+
+        return label
 
     def get_classes(self, index):
         return [self.get_class(index, i) for i in range(self.num_labels)]
+    
+    def get_source(self, index):
+        source = self.text[index]
+        if self.tokenizer is not None:
+            source = self.tokenizer(source)
+
+        if self.text_processors is not None:
+            source = self.text_processors(source)
+
+        return source
 
     def __getitem__(self, index):
-        labels = self.get_labels(index)
-        label = self.get_label(index)
-
-        spkembs = get_features_or_waveform(
-            os.path.join(self.audio_root, self.spk_embeds[index])
-        )
-        spkembs = torch.from_numpy(spkembs).float()
-        return {"id": index, "source": labels, "target": classes}
+        label = self.get_class(index)
+        source = self.get_source(index)
+        return {"id": index, "source": source, "label": label}
     
     def __len__(self):
         return len(self.wav_sizes)
@@ -221,57 +152,78 @@ class TextToClassDataset(FairseqDataset):
         if len(samples) == 0:
             return {}
 
-        fbanks = [s["target"] for s in samples]
-        fbank_sizes = [len(s) for s in fbanks]
+        texts = [s["source"] for s in samples]
+        text_sizes = [len(s) for s in texts]
 
-        collated_fbanks = _collate_frames(fbanks)
-        collated_fbanks_size = torch.tensor(fbank_sizes, dtype=torch.long)
-
-        # thin out frames for reduction factor (B, Lmax, odim) ->  (B, Lmax//r, odim)
-        if self.reduction_factor > 1:
-            collated_fbanks_in = collated_fbanks[:, self.reduction_factor - 1 :: self.reduction_factor]
-            collated_fbanks_size_in = collated_fbanks_size.new([torch.div(olen, self.reduction_factor, rounding_mode='floor') for olen in collated_fbanks_size])
-        else:
-            collated_fbanks_in, collated_fbanks_size_in = collated_fbanks, collated_fbanks_size
-
-        prev_output_tokens = torch.cat(
-            [collated_fbanks_in.new_zeros((collated_fbanks_in.shape[0], 1, collated_fbanks_in.shape[2])), collated_fbanks_in[:, :-1]], dim=1
+        text_size = max(text_sizes)
+        collated_texts, padding_mask = self.collater_text(
+            texts, text_size
         )
 
-        # make labels for stop prediction
-        labels = collated_fbanks.new_zeros(collated_fbanks.size(0), collated_fbanks.size(1))
-        for i, l in enumerate(fbank_sizes):
-            labels[i, l - 1 :] = 1.0
+        decoder_label = None
+        decoer_taget = None
+        decoder_target_lengths = None
+        if samples[0]["label"] is not None:
+            targets_by_label = [
+                [s["label"] for s in samples]
+            ]
+            targets_list, lengths_list, ntokens_list = self.collater_label(targets_by_label)
 
-        spkembs = _collate_frames([s["spkembs"] for s in samples], is_audio_input=True)
+            decoder_label = [
+                (targets_list[0][i, :lengths_list[0][i]]).long()
+                for i in range(targets_list[0].size(0))
+            ]
 
-        sources_by_label = [
-            [s["source"][i] for s in samples] for i in range(self.num_labels)
-        ]
-        sources_list, lengths_list, ntokens_list = self.collater_label(sources_by_label)
+            decoder_target = data_utils.collate_tokens(
+                decoder_label,
+                self.tgt_dict.pad(),
+                self.tgt_dict.eos(),
+                left_pad=False,
+                move_eos_to_beginning=False,
+            )
+            decoder_target_lengths = torch.tensor(
+                [x.size(0) for x in decoder_label], dtype=torch.long
+            )
+        prev_output_tokens = data_utils.collate_tokens(
+            [torch.LongTensor([-1]) for _ in samples],
+            self.tgt_dict.pad(),
+            self.tgt_dict.eos(),
+            left_pad=False,
+            move_eos_to_beginning=True,
+        )
 
         net_input = {
-            "src_tokens": sources_list[0], 
-            "src_lengths": lengths_list[0],
-            "prev_output_tokens": prev_output_tokens,
-            "tgt_lengths": collated_fbanks_size_in,
-            "spkembs": spkembs,
-            "task_name": "t2s",
+            "source": collated_texts, 
+            "padding_mask": padding_mask,
+            "prev_output_tokens": prev_output_tokens, 
+            "task_name": "t2c",
         }
         batch = {
             "id": torch.LongTensor([s["id"] for s in samples]),
-            "name": [s["audio_name"] for s in samples],
             "net_input": net_input,
-            "labels": labels,
-            "dec_target": collated_fbanks,
-            "dec_target_lengths": collated_fbanks_size,
-            "src_lengths": lengths_list[0],
-            "task_name": "t2s",
-            "ntokens": ntokens_list[0],
-            "target": collated_fbanks,
+            "target": decoder_target,
+            "target_lengths": decoder_target_lengths,
+            "task_name": "t2c",
+            "ntokens": len(samples),
         }
 
         return batch
+    
+    def collater_text(self, texts, text_size):
+        collated_texts = texts[0].new_zeros(len(texts), text_size)
+        padding_mask = (
+            torch.BoolTensor(collated_texts.shape).fill_(False)
+        )
+        for i, text in enumerate(texts):
+            diff = len(text) - text_size
+            if diff == 0:
+                collated_texts[i] = text
+            elif diff < 0:
+                collated_texts[i] = torch.cat([text, text.new_full((-diff,), 0.0)])
+                padding_mask[i, diff:] = True
+            else:
+                raise Exception("Diff should not be larger than 0")
+        return collated_texts, padding_mask
 
     def collater_seq_label(self, targets, pad):
         lengths = torch.LongTensor([len(t) for t in targets])
@@ -281,7 +233,7 @@ class TextToClassDataset(FairseqDataset):
 
     def collater_label(self, targets_by_label):
         targets_list, lengths_list, ntokens_list = [], [], []
-        itr = zip(targets_by_label, [self.src_dict.pad()])
+        itr = zip(targets_by_label, [self.tgt_dict.pad()])
         for targets, pad in itr:
             targets, lengths, ntokens = self.collater_seq_label(targets, pad)
             targets_list.append(targets)
