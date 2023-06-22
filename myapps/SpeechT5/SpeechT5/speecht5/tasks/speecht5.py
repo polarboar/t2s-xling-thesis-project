@@ -403,23 +403,22 @@ class SpeechT5Task(LegacyFairseqTask):
            
             from fairseq.data import ConcatDataset
             bpe_tokenizer = self.build_bpe(self.args)
-            text_procs = [LabelEncoder(self.dicts["text"])]
-            class_procs = [LabelEncoder(self.dicts["classes"])]
+            text_procs = LabelEncoder(self.dicts["text"])
+            class_procs = LabelEncoder(self.dicts["classes"])
 
             self.datasets[split] = TextToClassDataset(
-                    text_path=f"{self.args.data}/{split}.spm.en",
+                    text_path=f"{self.args.data}/{split}.tsv",
                     class_path=f"{self.args.data}/{split}.labels",
                     #text_paths=[f"{self.args.hubert_label_dir}/{split}.txt"],
                     text_processors=text_procs,
                     #class_paths=[f"{self.args.hubert_label_dir}/{name}.txt"],
                     class_processors=class_procs,
-                    max_keep_sample_size=self.max_pos[0],
-                    normalize=self.args.normalize,
                     store_labels=False,
                     src_dict=self.dicts["text"],
                     tgt_dict=self.dicts["classes"],
                     tokenizer=bpe_tokenizer,
-                    reduction_factor=self.args.reduction_factor,)
+                    reduction_factor=self.args.reduction_factor,
+                    )
 
             #sys.exit()
 

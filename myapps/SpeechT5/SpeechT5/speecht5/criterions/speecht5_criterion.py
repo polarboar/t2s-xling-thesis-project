@@ -110,7 +110,7 @@ class SpeechT5Criterion(FairseqCriterion):
         """
 
         task_name = sample['task_name']
-        if task_name == 's2t' or task_name == 's2c':
+        if task_name == 's2t' or task_name == 's2c' or task_name == 't2c':
             return self.text_criterion(model, sample, reduce)
         elif task_name == 't2s' or task_name == 's2s':
             return self.speech_criterion(model, sample)
@@ -125,7 +125,7 @@ class SpeechT5Criterion(FairseqCriterion):
         logging_outputs_dict = {}
         for logging_output in logging_outputs:
             for task_name in logging_output:
-                if task_name not in ['s2t', 't2s', 's2c', 's2s', 'text_pretrain', 'speech_pretrain']:
+                if task_name not in ['s2t', 't2s', 's2c', 't2c', 's2s', 't2c', 'text_pretrain', 'speech_pretrain']:
                     continue
 
                 if task_name not in logging_outputs_dict:
@@ -252,7 +252,7 @@ class SpeechT5Criterion(FairseqCriterion):
                         "t2s_enc_dec_attn_loss", enc_dec_attn_loss_sum / sample_size, sample_size, round=8
                     )
 
-            if task_name == 's2c':
+            if task_name == 's2c' or task_name == 't2c':
                 s2c_logging_output = logging_outputs_dict[task_name]
                 loss_sum = sum(log.get("loss", 0) for log in s2c_logging_output)
                 nll_loss_sum = sum(log.get("nll_loss", 0) for log in s2c_logging_output)

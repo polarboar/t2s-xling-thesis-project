@@ -68,17 +68,19 @@ def load_label_offset(label_path, inds, tot):
 def load_text_and_classes(text_path, class_path):
     classes = []
     text = []
+    sizes = []
     with open(text_path) as f:
         for line in f:
             data = line.strip()
             text.append(data)
+            sizes.append(len(data))
 
     with open(class_path) as f:
         for line in f:
             data = line.strip()
             classes.append(data)
 
-    return text, classes
+    return text, classes, sizes
 
 class TextToClassDataset(FairseqDataset):
     def __init__(
@@ -93,7 +95,6 @@ class TextToClassDataset(FairseqDataset):
         tgt_dict: Optional[Dictionary] = None,
         tokenizer = None,
         reduction_factor: int = 1,
-        max_length: Optional[int] = None
     ):
         self.shuffle = shuffle
         self.tokenizer = tokenizer
@@ -103,12 +104,10 @@ class TextToClassDataset(FairseqDataset):
         self.text_processors = text_processors
         self.class_processors = class_processors
 
-        self.text, self.classes = load_text_and_classes(text_path, class_path)
+        self.text, self.classes, self.text_sizes = load_text_and_classes(text_path, class_path)
 
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
-
-        self.max_length = max_length
 
         self.store_labels = store_labels
 
@@ -137,7 +136,7 @@ class TextToClassDataset(FairseqDataset):
     def get_source(self, index):
         source = self.text[index]
         if self.tokenizer is not None:
-            source = self.tokenizer(source)
+            source = self.tokenizer.encode(source)
 
         if self.text_processors is not None:
             source = self.text_processors(source)
@@ -150,7 +149,7 @@ class TextToClassDataset(FairseqDataset):
         return {"id": index, "source": source, "label": label}
     
     def __len__(self):
-        return len(self.wav_sizes)
+        return len(self.text)
 
     def collater(self, samples):
         samples = [s for s in samples if s["source"] is not None]
@@ -161,9 +160,10 @@ class TextToClassDataset(FairseqDataset):
         text_sizes = [len(s) for s in texts]
 
         text_size = max(text_sizes)
-        collated_texts, padding_mask = self.collater_text(
-            texts, text_size
-        )
+        #collated_texts, padding_mask = self.collater_text(
+        #    texts, text_size
+        #)
+        sources_list, sources_lengths_list, sources_ntokens_list = self.collater_text(texts) 
 
         decoder_label = None
         decoer_taget = None
@@ -198,8 +198,8 @@ class TextToClassDataset(FairseqDataset):
         )
 
         net_input = {
-            "source": collated_texts, 
-            "padding_mask": padding_mask,
+            "src_tokens": sources_list[0], 
+            "src_lengths": sources_lengths_list[0],
             "prev_output_tokens": prev_output_tokens, 
             "task_name": "t2c",
         }
@@ -214,6 +214,7 @@ class TextToClassDataset(FairseqDataset):
 
         return batch
     
+    """
     def collater_text(self, texts, text_size):
         collated_texts = texts[0].new_zeros(len(texts), text_size)
         padding_mask = (
@@ -229,12 +230,23 @@ class TextToClassDataset(FairseqDataset):
             else:
                 raise Exception("Diff should not be larger than 0")
         return collated_texts, padding_mask
+    """
 
     def collater_seq_label(self, targets, pad):
         lengths = torch.LongTensor([len(t) for t in targets])
         ntokens = lengths.sum().item()
         targets = data_utils.collate_tokens(targets, pad_idx=pad, left_pad=False)
         return targets, lengths, ntokens
+    
+    def collater_text(self, sources_by_label):
+        sources_list, lengths_list, ntokens_list = [], [], []
+        itr = zip(sources_by_label, [self.src_dict.pad()])
+        for sources, pad in itr:
+            sources, lengths, ntokens = self.collater_seq_label(sources, pad)
+            sources_list.append(sources)
+            lengths_list.append(lengths)
+            ntokens_list.append(ntokens)
+        return sources_list, lengths_list, ntokens_list
 
     def collater_label(self, targets_by_label):
         targets_list, lengths_list, ntokens_list = [], [], []
@@ -250,11 +262,11 @@ class TextToClassDataset(FairseqDataset):
         return self.size(index)
 
     def size(self, index):
-        return self.wav_sizes[index]
+        return self.text_sizes[index]
 
     @property
     def sizes(self):
-        return np.array(self.wav_sizes)
+        return np.array(self.text_sizes)
 
     def ordered_indices(self):
         if self.shuffle:
@@ -262,6 +274,6 @@ class TextToClassDataset(FairseqDataset):
         else:
             order = [np.arange(len(self))]
 
-        order.append(self.wav_sizes)
+        order.append(self.text_sizes)
         return np.lexsort(order)[::-1]
 
