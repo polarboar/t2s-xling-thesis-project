@@ -693,6 +693,15 @@ class SpeechT5Task(LegacyFairseqTask):
             encoder_input.update(kwargs)
             encoder_input.update({"prev_output_tokens": prefix_tokens})
             return models[0].generate_class(**encoder_input)
+    
+    def generate_class_from_text(self, models, net_input, prefix_tokens, **kwargs):
+        with torch.no_grad():
+            encoder_input = {
+                k: v for k, v in net_input.items() if k != "prev_output_tokens" and k != "task_name"
+            }
+            encoder_input.update(kwargs)
+            encoder_input.update({"prev_output_tokens": prefix_tokens})
+            return models[0].generate_class_from_text(**encoder_input)
 
     def generate_speech(self, models, net_input, **kwargs):
         with torch.no_grad():

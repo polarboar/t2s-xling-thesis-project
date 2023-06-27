@@ -162,8 +162,8 @@ class TextToClassDataset(FairseqDataset):
         text_size = max(text_sizes)
         #collated_texts, padding_mask = self.collater_text(
         #    texts, text_size
-        #)
-        sources_list, sources_lengths_list, sources_ntokens_list = self.collater_text(texts) 
+        #) 
+        sources_list, sources_lengths_list, sources_ntokens_list = self.collater_text([texts]) 
 
         decoder_label = None
         decoer_taget = None
