@@ -711,6 +711,8 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
         else:
             if task.t5_task == "s2c":
                 speaker_decoder_postnet = cls.build_speaker_decoder_postnet(args.sid_embed_dim, len(task.dicts['text']), args)
+            elif task.t5_task == "t2c":
+                speaker_decoder_postnet = cls.build_speaker_decoder_postnet(args.sid_embed_dim, len(task.dicts['classes']), args)
             else:
                 speaker_decoder_postnet = None
 
@@ -802,7 +804,7 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
         else:
             output_type = 'speech'
 
-        if task_name is not None and task_name == "s2c":
+        if task_name is not None and (task_name == "s2c" or task_name == "t2c"):
             if target_list is not None and target_list.size(1) == 1 and not getattr(self.args, "sid_t5_postnet", False):
                 sid_target = F.one_hot(target_list.squeeze(1), num_classes=self.speaker_decoder_postnet.class_num)
             else:
@@ -833,7 +835,7 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
         if task_name is not None and task_name == 'speech_pretrain' and feature_only:
             return encoder_output["encoder_out"][0].transpose(0, 1)
 
-        if task_name is not None and task_name == 's2c':
+        if task_name is not None and (task_name == 's2c' or task_name == 't2c'):
             if self.args.sid_pooling_layer == "encoder":
                 return self.speaker_decoder_postnet(encoder_output["encoder_out"][0].transpose(0, 1).mean(1), sid_target), None
             elif self.args.sid_pooling_layer == "encoder-cls":
@@ -893,7 +895,7 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
         if output_type == 'text':
             # _ is the incremental state
             prev_output_tokens, tgt_mask, _ = self.text_decoder_prenet(prev_output_tokens)
-            if task_name is not None and task_name == 's2c':
+            if task_name is not None and (task_name == 's2c' or task_name == 't2c'):
                 prev_output_tokens = torch.zeros_like(prev_output_tokens)
         else:
             # integrate speaker embedding
@@ -909,7 +911,7 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
                 prev_output_tokens, tgt_mask = self.speech_decoder_prenet(prev_output_tokens, tgt_lengths)
 
         # BART Sequence Classification: cat <pad> + feature before decoder
-        if task_name is not None and task_name == 's2c' and self.args.sid_pooling_layer == "decoder-las":
+        if task_name is not None and (task_name == 's2c' or task_name == 't2c') and self.args.sid_pooling_layer == "decoder-las":
             decoder_feat_input, decoder_feat_mask = self.speech_decoder_prenet(src_tokens, src_lengths)
             prev_output_tokens, tgt_mask = self._integrate_with_speaker_cls((prev_output_tokens, tgt_mask), decoder_feat_input, decoder_feat_mask, cls_first=False)
         
@@ -922,7 +924,7 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
                                              full_context_alignment=getattr(self.args, "decoder_full_context_alignment", False), 
                                              alignment_layer=(-1 if target_list is None and output_type == 'speech' else None))
         # Decoder Postnet
-        if task_name is not None and task_name == 's2c':
+        if task_name is not None and (task_name == 's2c' or task_name == 't2c'):
             if not getattr(self.args, "sid_t5_postnet", False):
                 if self.args.sid_pooling_layer == "decoder":
                     return self.speaker_decoder_postnet(decoder_output.mean(1), sid_target), None
@@ -1170,6 +1172,29 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
 
     def generate_class(self, source, prev_output_tokens, **kwargs):
         encoder_out = self.forward_encoder(source, padding_mask=kwargs["padding_mask"])
+
+        prev_output_tokens, tgt_mask, _ = self.text_decoder_prenet(prev_output_tokens, {})
+        prev_output_tokens = torch.zeros_like(prev_output_tokens) # s2c use zero vector as [CLS]
+
+        decoder_output, extra = self.decoder(
+            prev_output_tokens,
+            tgt_mask,
+            encoder_out=encoder_out,
+        )
+
+        decoder_out, embed = self.speaker_decoder_postnet(decoder_output.mean(1))
+
+        pred_class = decoder_out.argmax(1)
+        return pred_class
+    
+    def generate_class_from_text(self, src_tokens, prev_output_tokens, **kwargs):
+        encoder_out = self.forward_text_encoder(src_tokens)
+
+        #minlenratio = kwargs.get("threshold", 0.0)
+        #maxlenratio = kwargs.get("threshold", 20.0)
+
+        #maxlen = int(encoder_out["encoder_out"][0].size(0) * maxlenratio / self.reduction_factor)
+        #minlen = int(encoder_out["encoder_out"][0].size(0) * minlenratio / self.reduction_factor)
 
         prev_output_tokens, tgt_mask, _ = self.text_decoder_prenet(prev_output_tokens, {})
         prev_output_tokens = torch.zeros_like(prev_output_tokens) # s2c use zero vector as [CLS]
