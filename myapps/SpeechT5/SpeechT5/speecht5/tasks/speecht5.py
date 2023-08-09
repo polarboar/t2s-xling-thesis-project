@@ -287,6 +287,11 @@ class SpeechT5Task(LegacyFairseqTask):
         self.blank_symbol_idx = self.dicts["text"].add_symbol("<ctc_blank>")
         self.blank_symbol = "<ctc_blank>"
 
+        # Add extra symbols to classes dictionary
+        if "classes" in dicts:
+            dicts["classes"].add_symbol("<ctc_blank>")
+            dicts["classes"].add_symbol("<mask>")
+
         # add mask token
         if hasattr(args, "iid_noise_target") and args.iid_noise_target:
             self.uni_mask_idxs = []
@@ -316,7 +321,7 @@ class SpeechT5Task(LegacyFairseqTask):
             else:
                 dicts["text"] = Dictionary.load(op.join(args.data, config.vocab_filename))
 
-        if args.t5_task == "t2c":
+        if args.t5_task == "t2c" or args.t5_task == "s2c":
             dicts["classes"] = Dictionary.load(op.join(args.data, "dict_classes.txt"))
 
         return cls(args, dicts, config)
@@ -387,7 +392,7 @@ class SpeechT5Task(LegacyFairseqTask):
             else:
                 max_length = 2560000
             manifest = op.join(f"{self.args.data}", f"{split}.tsv")
-            procs = LabelEncoder(self.dicts["text"]) # map speaker to id
+            procs = LabelEncoder(self.dicts["classes"]) # map speaker to id
             self.datasets[split] = SpeechToClassDataset(
                 manifest_path=manifest,
                 sample_rate=self.args.sample_rate,
@@ -395,7 +400,7 @@ class SpeechT5Task(LegacyFairseqTask):
                 max_keep_sample_size=self.max_pos[0] if self.args.max_speech_sample_size is None else self.args.max_speech_sample_size,
                 min_keep_sample_size=self.args.min_speech_sample_size,
                 normalize=self.args.normalize,
-                tgt_dict=self.dicts["text"],
+                tgt_dict=self.dicts["classes"],
                 max_length=max_length
             )
         elif self.t5_task == "t2c":

@@ -710,7 +710,7 @@ class T5TransformerModel(FairseqEncoderDecoderModel):
             speaker_decoder_postnet = None
         else:
             if task.t5_task == "s2c":
-                speaker_decoder_postnet = cls.build_speaker_decoder_postnet(args.sid_embed_dim, len(task.dicts['text']), args)
+                speaker_decoder_postnet = cls.build_speaker_decoder_postnet(args.sid_embed_dim, len(task.dicts['classes']), args)
             elif task.t5_task == "t2c":
                 speaker_decoder_postnet = cls.build_speaker_decoder_postnet(args.sid_embed_dim, len(task.dicts['classes']), args)
             else:

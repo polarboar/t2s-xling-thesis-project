@@ -6,12 +6,14 @@ export CUDA_VISIBLE_DEVICES=0
 
 
 MODEL=speecht5_base
-DATA_ROOT=/disk/scratch1/ramons/data/t2s-xling/data_formated/fairseq/speech/tsv/sa_slue/
-SAVE_DIR=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sa/
+DATA_ROOT=/home/s2450029/repos/t2s-xling/data_formatted/fairseq/speech/tsv/sa_slue/
+SAVE_DIR=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sa/$(date +"%Y%m%d_%H_%M")
+#SAVE_DIR=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}/slue_sa/20230705_18_11
 TRAIN_SET=train
 VALID_SET=valid
 USER_DIR=speecht5
-PT_CHECKPOINT_PATH=/disk/scratch1/ramons/data/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
+PT_CHECKPOINT_PATH=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
+#PT_CHECKPOINT_PATH=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/speecht5_base_t2c/slue_sa/20230712_02_31/checkpoint_best.pt
 
 mkdir -p ${SAVE_DIR}
 
@@ -34,8 +36,8 @@ fairseq-train ${DATA_ROOT} \
   --t5-task s2c \
   --sample-rate 16000 \
   --num-workers 4 \
-  --batch-size 2 \
-  --update-freq 2 \
+  --batch-size 1 \
+  --update-freq 16 \
   --data-buffer-size 0 \
   \
   --criterion speecht5 \
@@ -56,13 +58,13 @@ fairseq-train ${DATA_ROOT} \
   --feature-grad-mult 1.0 \
   --weight-decay 0.1 \
   \
-  --max-update 60000 \
+  --max-update 6000 \
   --max-text-positions 600 \
-  --max-speech-positions 8000 \
+  --max-speech-positions 250000 \
   --required-batch-size-multiple 1 \
   --skip-invalid-size-inputs-valid-test \
-  --save-interval-updates 10000 \
-  --validate-after-updates 20000 \
+  --save-interval-updates 1000 \
+  --validate-after-updates 10 \
   --no-epoch-checkpoints \
   --log-interval 10 \
   \

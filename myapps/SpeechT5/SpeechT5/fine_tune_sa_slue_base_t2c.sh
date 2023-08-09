@@ -7,12 +7,13 @@ export CUDA_VISIBLE_DEVICES=0
 
 MODEL=speecht5_base
 DATA_ROOT=/home/s2450029/repos/t2s-xling/data_formatted/fairseq/text/tsv/sa_slue/
-SAVE_DIR=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}_t2c/slue_sa/
+SAVE_DIR=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}_t2c/slue_sa/$(date +"%Y%m%d_%H_%M")
 TRAIN_SET=train
 VALID_SET=valid
 USER_DIR=speecht5
 BPE_TOKENIZER=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/spm/spm_char.model
-PT_CHECKPOINT_PATH=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
+#PT_CHECKPOINT_PATH=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/${MODEL}.pt
+PT_CHECKPOINT_PATH=/home/s2450029/repos/t2s-xling/models/speechT5/fairseq/speecht5_base/slue_sa/20230722_00_58/checkpoint_best.pt
 
 mkdir -p ${SAVE_DIR}
 
@@ -34,8 +35,8 @@ fairseq-train ${DATA_ROOT} \
   --task speecht5 \
   --t5-task t2c  \
   --num-workers 4 \
-  --batch-size 1 \
-  --update-freq 16 \
+  --batch-size 4 \
+  --update-freq 4 \
   --data-buffer-size 0 \
   --max-tokens 1400000 \
   --bpe-tokenizer ${BPE_TOKENIZER} \

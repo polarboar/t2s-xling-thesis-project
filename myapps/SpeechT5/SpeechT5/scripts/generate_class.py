@@ -114,6 +114,9 @@ def _main(cfg: DictConfig, output_file):
     hyp_list = []
     dict_class_ramons = {}
 
+    # Print Dictionary
+    dict_class.print_dictionary()
+
     with open(os.path.join(cfg.common_eval.results_path,"hyp"),"w") as hyp, open(os.path.join(cfg.common_eval.results_path,"metrics"),"w") as result_metrics, open(os.path.join(cfg.common_eval.results_path,"ref"),"w") as ref:
 
             for i, sample in enumerate(progress):
@@ -175,6 +178,9 @@ def _main(cfg: DictConfig, output_file):
             logger.info(
                 f"Accuracy on {cfg.dataset.gen_subset}: {n_correct*100.0/n_total:.3f} ({n_correct}/{n_total})"
             )
+            logger.info("PRECISION: "+str(100*precision))
+            logger.info("RECALL: "+str(100*recall))
+            logger.info("F1: "+str(100*f1_score))
             print(os.path.join(cfg.common_eval.results_path,"metrics"))
 
 

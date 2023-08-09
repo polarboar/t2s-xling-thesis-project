@@ -55,6 +55,11 @@ class Dictionary:
     def __contains__(self, sym):
         return sym in self.indices
 
+    def print_dictionary(self):
+        print('Printing Dictionary')
+        for i in self.indices:
+            print(f'Key: {i}, Value: {self.indices[i]}')
+    
     def index(self, sym):
         """Returns the index of the specified symbol"""
         assert isinstance(sym, str)
