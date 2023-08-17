@@ -26,7 +26,7 @@ checkpoint = torch.load(model_path)
 cfg = SpeechLMConfig(checkpoint['cfg']['model'])
 model = SpeechLM(cfg)
 model.load_state_dict(checkpoint['model'])
-model.eval()
+#model.eval()
 
 # Define LabelEncoder
 class LabelEncoder(object):
@@ -55,8 +55,9 @@ class SentimentClassifier(nn.Module):
     def forward(self, input):
 
         features = None
-        with torch.no_grad():
-            features = self.model.extract_features(input)[0]
+        #with torch.no_grad():
+        #    features = self.model.extract_features(input)[0]
+        features = self.model.forward(input, features_only=True)['x']
         features = torch.sum(features, dim=1)
         logits = self.classifier(features[0])
         return logits
@@ -145,7 +146,7 @@ if __name__ == '__main__':
     # Train Classifier
     num_epochs = 10
 
-    log_interval = 50
+    log_interval = 1000
 
     best_train_accuracy, best_valid_accuracy = 0, 0
 
@@ -154,6 +155,7 @@ if __name__ == '__main__':
         correct = 0
         total = 0
         classifier.train()
+        model.train()
         for idx, (inputs, labels) in zip(range(train_size), train_loader):
             inputs = torch.tensor(np.array([load_audio(train_root, inputs[0])])).to(torch.float)
             inputs = inputs.to(device)
@@ -186,6 +188,7 @@ if __name__ == '__main__':
         # Validate
         logger.info(f'Evaluating model on validation set....')
         classifier.eval()
+        model.eval()
         valid_loss = 0.0
         correct = 0
         total = 0
