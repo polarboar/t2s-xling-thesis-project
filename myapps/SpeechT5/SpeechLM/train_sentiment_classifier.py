@@ -58,6 +58,7 @@ class SentimentClassifier(nn.Module):
         #with torch.no_grad():
         #    features = self.model.extract_features(input)[0]
         features = self.model.forward(input, features_only=True)['x']
+        num_tokens = features.shape[1]
         features = torch.sum(features, dim=1)
         logits = self.classifier(features[0])
         return logits
@@ -139,7 +140,8 @@ if __name__ == '__main__':
 
     # Criterion and Optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(classifier.parameters(), lr=0.001)
+    optimizer_classifier = optim.Adam(classifier.parameters(), lr=0.0001)
+    optimizer_model = optim.Adam(model.parameters(), lr=0.0001)
 
     classifier.to(device)
 
@@ -159,7 +161,8 @@ if __name__ == '__main__':
         for idx, (inputs, labels) in zip(range(train_size), train_loader):
             inputs = torch.tensor(np.array([load_audio(train_root, inputs[0])])).to(torch.float)
             inputs = inputs.to(device)
-            optimizer.zero_grad()
+            optimizer_classifier.zero_grad()
+            optimizer_model.zero_grad()
             outputs = classifier(inputs)
             labels = labels.flatten().to(torch.float)
             labels = labels.to(device)
@@ -174,7 +177,8 @@ if __name__ == '__main__':
 
             # Propagate Loss and update weights
             loss.backward()
-            optimizer.step()
+            optimizer_classifier.step()
+            optimizer_model.step()
 
             if (idx+1)%log_interval == 0:
                 logger.info(f'Epoch: {epoch+1}/{num_epochs}, Trained: {idx+1}/{train_size}')
