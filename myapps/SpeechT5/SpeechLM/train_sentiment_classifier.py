@@ -10,11 +10,15 @@ from SpeechLM import SpeechLMConfig, SpeechLM
 import soundfile as sf
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', datefmt='%d-%m-%Y %I:%M:%S %p', level=logging.INFO)
 
 # Use GPU or CPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #device="cpu"
-print(device)
+logger.info(f'Running on : {device}')
 
 # Load pre-trained SpeechLM model
 model_path = '/home/polarboar/models/speechlmh_base_checkpoint_clean.pt'
@@ -77,13 +81,13 @@ def load_audio_names(manifest_path, max_keep, min_keep, retry_times=5):
                     sizes.append(sz)
                     labels.append(items[2])
         if len(names) == 0:
-            print(f"Fail to load manifest for the {i} time")
+            logger.info(f"Fail to load manifest for the {i} time")
             #time.sleep(1)
             continue
         else:
             break
     tot = ind + 1
-    print(
+    logger.info(
         (
             f"max_keep={max_keep}, min_keep={min_keep}, "
             f"loaded {len(names)}, skipped {n_short} short and {n_long} long, "
@@ -104,14 +108,8 @@ label_encoder = LabelEncoder(dicts['classes'])
 dict_size = len(label_encoder.dictionary.indices)
 
 def create_dataset(inputs, labels, set_size):
-    #label = labels[0]
-    #print(f'label; {label}')
     labels_encoded = torch.tensor([label_encoder(label) for label in labels]).long()
     labels_encoded = F.one_hot(labels_encoded, num_classes=dict_size)
-    #print(f'label_encoder: {labels_encoded}')
-    #print(f'one_hot: {F.one_hot(labels_encoded, num_classes=dict_size)}')
-
-    #for input, label
 
     return [[inputs[i], labels_encoded[i]] for i in range(set_size)]
 
@@ -120,12 +118,6 @@ if __name__ == '__main__':
 
     train_root, train_names, train_inds, train_tot, train_sizes, train_labels = load_audio_names(manifest_path+'train.tsv', min_keep=None, max_keep=None)
     valid_root, valid_names, valid_inds, valid_tot, valid_sizes, valid_labels = load_audio_names(manifest_path+'valid.tsv', min_keep=None, max_keep=None)
-
-    #print(f'names: {names[:10]}')
-    #print(f'inds: {inds[:10]}')
-    #print(f'sizes: {sizes[:10]}')
-    #print(f'labels: {labels[:10]}')
-
     
     # Create Classifier
     input_dim = 768
@@ -137,24 +129,9 @@ if __name__ == '__main__':
     train_size = len(train_labels)
     valid_size = len(valid_labels)
 
-    print(f'Train Size: {train_size}, Validation Size: {valid_size}')
+    logger.info(f'Train Size: {train_size}, Validation Size: {valid_size}')
     train_dataset = create_dataset(train_names, train_labels, train_size)
     valid_dataset = create_dataset(valid_names, valid_labels, valid_size)
-    """
-    for i in range(train_size):
-        input = torch.randn(1,10000)
-        label = torch.randint(low=0,high=1, size=(1,1))
-        #label = torch.tensor([1])
-        encoded_label = F.one_hot(label[0],num_classes=2)
-        train_dataset.append([input[0],encoded_label[0]])
-
-    for i in range(valid_size):
-        input = torch.randn(1,10000)
-        #label = torch.tensor([1])
-        label = torch.randint(low=0,high=2, size=(1,1))
-        encoded_label = F.one_hot(label[0],num_classes=2)
-        valid_dataset.append([input[0],encoded_label[0]])
-    """
 
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=True)
@@ -168,7 +145,14 @@ if __name__ == '__main__':
     # Train Classifier
     num_epochs = 10
 
+    log_interval = 50
+
+    best_train_accuracy, best_valid_accuracy = 0, 0
+
     for epoch in range(num_epochs):
+        train_loss = 0.0
+        correct = 0
+        total = 0
         classifier.train()
         for idx, (inputs, labels) in zip(range(train_size), train_loader):
             inputs = torch.tensor(np.array([load_audio(train_root, inputs[0])])).to(torch.float)
@@ -178,13 +162,29 @@ if __name__ == '__main__':
             labels = labels.flatten().to(torch.float)
             labels = labels.to(device)
             loss = criterion(outputs, labels)
+
+            # Collect statistics
+            train_loss += loss
+            #predicted = torch.argmax(outputs)
+            #label_idx = torch.argmax(labels)
+            total += 1
+            correct += 1 if torch.argmax(outputs) == torch.argmax(labels) else 0
+
+            # Propagate Loss and update weights
             loss.backward()
             optimizer.step()
 
-            if (idx+1)%50 == 0:
-                print(f'Epoch: {epoch+1}/{num_epochs}, Trained: {idx+1}/{train_size}')
+            if (idx+1)%log_interval == 0:
+                logger.info(f'Epoch: {epoch+1}/{num_epochs}, Trained: {idx+1}/{train_size}')
+
+        #logger.info()
+        logger.info(f'Epoch {epoch+1}/{num_epochs}, '
+            f'Train Loss: {train_loss/len(train_loader):.4f}, '
+            f'Train Accruacy: {correct*100/total:.2f}')
+        best_train_accuracy = max(best_train_accuracy, correct*100/total)
         
         # Validate
+        logger.info(f'Evaluating model on validation set....')
         classifier.eval()
         valid_loss = 0.0
         correct = 0
@@ -202,10 +202,11 @@ if __name__ == '__main__':
                 total += 1
                 correct += (predicted == label_idx).sum().item()
 
-        print(f'Time: {datetime.now().strftime("%H:%M:%S")}')
-        print(f'Epoch {epoch+1}/{num_epochs}')
-        print(f'Valid Loss: {valid_loss/len(valid_loader):.4f}) '
+        logger.info(f'Valid Loss: {valid_loss/len(valid_loader):.4f}, '
             f'Valid Accruacy: {correct*100/total:.2f}')
+        best_valid_accuracy = max(best_valid_accuracy, correct*100/total)
+
+        logger.info(f'Best Train Accuracy: {best_train_accuracy:.2f}, Best Valid Accuracy: {best_valid_accuracy:.2f}')
         
 
         
