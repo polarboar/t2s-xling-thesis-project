@@ -12,6 +12,9 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import logging
 
+torch.manual_seed(42)
+np.random.seed(42)
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', datefmt='%d-%m-%Y %I:%M:%S %p', level=logging.INFO)
 
@@ -38,7 +41,7 @@ class LabelEncoder(object):
             label, append_eos=False, add_if_not_exist=False,
         )
 
-# Define Classifier
+# Define Lienar Classifier
 class SentimentClassifier(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -62,6 +65,22 @@ class SentimentClassifier(nn.Module):
         features = torch.sum(features, dim=1)
         logits = self.classifier(features[0])
         return logits
+
+class GRUSentimenetClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+        self.speechlm = model
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.gru = nn.GRU(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+    
+    def forward(self, x):
+        features = self.speechlm.forward(x, features_only=True)['x']
+        _, hidden = self.gru(features)
+        output = self.fc(hidden.squeeze(0))
+        output = torch.softmax(output, dim=1)
+        return output[0]
 
 def load_audio_names(manifest_path, max_keep, min_keep, retry_times=5):
     n_long, n_short = 0, 0
@@ -125,7 +144,8 @@ if __name__ == '__main__':
     input_dim = 768
     output_dim = dict_size
 
-    classifier = SentimentClassifier(input_dim, output_dim)
+    #classifier = SentimentClassifier(input_dim, output_dim)
+    classifier = GRUSentimenetClassifier(input_dim, input_dim, output_dim)
 
     # Load Data
     train_size = len(train_labels)
