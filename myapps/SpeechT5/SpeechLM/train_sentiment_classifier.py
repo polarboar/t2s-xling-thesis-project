@@ -64,7 +64,8 @@ class SentimentClassifier(nn.Module):
         num_tokens = features.shape[1]
         features = torch.sum(features, dim=1)
         logits = self.classifier(features[0])
-        return logits
+        output = torch.softmax(logits, dim=0)
+        return output
 
 class GRUSentimenetClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
